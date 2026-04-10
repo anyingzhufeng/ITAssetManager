@@ -7,15 +7,25 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// === 数据库 (PostgreSQL) ===
-var pgHost = builder.Configuration["Database:Host"] ?? "localhost";
-var pgPort = builder.Configuration["Database:Port"] ?? "5432";
-var pgDb = builder.Configuration["Database:Name"] ?? "itasset";
-var pgUser = builder.Configuration["Database:User"] ?? "postgres";
-var pgPassword = builder.Configuration["Database:Password"] ?? "postgres";
-var connStr = $"Host={pgHost};Port={pgPort};Database={pgDb};Username={pgUser};Password={pgPassword}";
+// === 数据库 ===
+var dbProvider = builder.Configuration["Database:Provider"] ?? "SQLite";
+string connStr;
 
-builder.Services.AddInfrastructure(connStr);
+if (dbProvider.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase))
+{
+    var pgHost = builder.Configuration["Database:Host"] ?? "localhost";
+    var pgPort = builder.Configuration["Database:Port"] ?? "5432";
+    var pgDb = builder.Configuration["Database:Name"] ?? "itasset";
+    var pgUser = builder.Configuration["Database:User"] ?? "postgres";
+    var pgPassword = builder.Configuration["Database:Password"] ?? "postgres";
+    connStr = $"Host={pgHost};Port={pgPort};Database={pgDb};Username={pgUser};Password={pgPassword}";
+}
+else
+{
+    connStr = $"Data Source={builder.Configuration["Database:SqlitePath"] ?? "data/itasset.db"}";
+}
+
+builder.Services.AddInfrastructure(dbProvider, connStr);
 
 // === JWT 认证 ===
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "ITAssetManager_DefaultSecret_Key_2026!@#$%";
@@ -59,7 +69,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// === 自动建库（仅开发环境）===
+// === 自动建库 ===
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ITAssetManager.Infrastructure.Data.AppDbContext>();

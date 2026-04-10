@@ -6,7 +6,7 @@
 
 | 层 | 技术 |
 |---|------|
-| 后端 | .NET 8 Web API, EF Core 8, SQLite |
+| 后端 | .NET 8 Web API, EF Core 8, SQLite / PostgreSQL |
 | 前端 | Vue 3, TypeScript, Element Plus, Vite |
 | 认证 | JWT + 飞书 SSO (OAuth2) |
 | 架构 | Clean Architecture (Core/Infrastructure/API) |
@@ -20,6 +20,34 @@
 - 📊 **仪表盘** — 资产统计、状态分布
 - ⚙️ **系统设置** — 飞书配置、系统参数
 - 🔐 **JWT 认证** — 用户名密码 + 飞书 SSO
+
+## 数据库
+
+系统支持两种数据库，通过 `appsettings.json` 的 `Database:Provider` 切换：
+
+### SQLite（开发/测试）
+```json
+{
+  "Database": {
+    "Provider": "SQLite",
+    "SqlitePath": "data/itasset.db"
+  }
+}
+```
+
+### PostgreSQL（生产）
+```json
+{
+  "Database": {
+    "Provider": "PostgreSQL",
+    "Host": "localhost",
+    "Port": "5432",
+    "Name": "itasset",
+    "User": "postgres",
+    "Password": "your_password"
+  }
+}
+```
 
 ## 快速开始
 
@@ -49,6 +77,8 @@ npm run dev
 | 版本 | 日期 | 内容 |
 |------|------|------|
 | v0.1.0 | 2026-04-10 | 初始版本：基础 CRUD + JWT + 飞书配置 |
+| v0.2.0 | 2026-04-10 | 切换 PostgreSQL 数据库 |
+| v0.2.1 | 2026-04-10 | 支持 SQLite / PostgreSQL 双数据库切换 |
 
 ## License
 
