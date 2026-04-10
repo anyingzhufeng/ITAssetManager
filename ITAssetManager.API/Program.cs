@@ -7,10 +7,15 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// === 数据库 ===
-var dbPath = Path.Combine(builder.Environment.ContentRootPath, "data", "itasset.db");
-Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
-builder.Services.AddInfrastructure($"Data Source={dbPath}");
+// === 数据库 (PostgreSQL) ===
+var pgHost = builder.Configuration["Database:Host"] ?? "localhost";
+var pgPort = builder.Configuration["Database:Port"] ?? "5432";
+var pgDb = builder.Configuration["Database:Name"] ?? "itasset";
+var pgUser = builder.Configuration["Database:User"] ?? "postgres";
+var pgPassword = builder.Configuration["Database:Password"] ?? "postgres";
+var connStr = $"Host={pgHost};Port={pgPort};Database={pgDb};Username={pgUser};Password={pgPassword}";
+
+builder.Services.AddInfrastructure(connStr);
 
 // === JWT 认证 ===
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "ITAssetManager_DefaultSecret_Key_2026!@#$%";
@@ -54,7 +59,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// === 自动建库 ===
+// === 自动建库（仅开发环境）===
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ITAssetManager.Infrastructure.Data.AppDbContext>();
