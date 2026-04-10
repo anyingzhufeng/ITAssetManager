@@ -1,0 +1,6 @@
+@ITAssetManager.API_HostAddress = http://localhost:5072
+
+GET {{ITAssetManager.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

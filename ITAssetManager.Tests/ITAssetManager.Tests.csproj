@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ITAssetManager.Core\ITAssetManager.Core.csproj" />
+    <ProjectReference Include="..\ITAssetManager.Infrastructure\ITAssetManager.Infrastructure.csproj" />
+    <ProjectReference Include="..\ITAssetManager.API\ITAssetManager.API.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
