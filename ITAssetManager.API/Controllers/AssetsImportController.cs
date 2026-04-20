@@ -1,5 +1,4 @@
 using ClosedXML.Excel;
-using ITAssetManager.API.DTOs;
 using ITAssetManager.Core.Entities;
 using ITAssetManager.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
@@ -12,111 +11,159 @@ namespace ITAssetManager.API.Controllers;
 public class AssetsImportController : ControllerBase
 {
     private readonly AppDbContext _db;
+
     private static readonly Dictionary<string, AssetCategory> CategoryMap = new(StringComparer.OrdinalIgnoreCase)
     {
-        {"台式电脑", AssetCategory.Computer}, {"Computer", AssetCategory.Computer},
-        {"笔记本", AssetCategory.Laptop}, {"Laptop", AssetCategory.Laptop},
-        {"服务器", AssetCategory.Server}, {"Server", AssetCategory.Server},
-        {"网络设备", AssetCategory.NetworkDevice}, {"NetworkDevice", AssetCategory.NetworkDevice},
-        {"打印机", AssetCategory.Printer}, {"Printer", AssetCategory.Printer},
-        {"手机", AssetCategory.Phone}, {"电话", AssetCategory.Phone}, {"Phone", AssetCategory.Phone},
-        {"软件", AssetCategory.Software}, {"Software", AssetCategory.Software},
-        {"显示器", AssetCategory.Monitor}, {"Monitor", AssetCategory.Monitor},
-        {"外设", AssetCategory.Peripheral}, {"Peripheral", AssetCategory.Peripheral},
-        {"其他", AssetCategory.Other}, {"Other", AssetCategory.Other},
+        {"笔记本电脑", AssetCategory.Laptop}, {"笔记本", AssetCategory.Laptop},
+        {"台式机电脑", AssetCategory.Computer}, {"台式电脑", AssetCategory.Computer}, {"台式机", AssetCategory.Computer},
+        {"服务器", AssetCategory.Server},
+        {"网络安全", AssetCategory.NetworkDevice}, {"数通", AssetCategory.NetworkDevice},
+        {"打印机", AssetCategory.Printer},
+        {"扫描仪", AssetCategory.Peripheral},
+        {"会议平板", AssetCategory.Monitor},
+        {"显示器", AssetCategory.Monitor},
+        {"鼠标", AssetCategory.Peripheral},
+        {"键盘", AssetCategory.Peripheral},
+        {"充电器", AssetCategory.Peripheral},
+        {"拾音器", AssetCategory.Peripheral},
+        {"扩展坞", AssetCategory.Peripheral},
+        {"存储", AssetCategory.Server},
     };
 
     private static readonly Dictionary<string, AssetStatus> StatusMap = new(StringComparer.OrdinalIgnoreCase)
     {
-        {"在库", AssetStatus.InStock}, {"InStock", AssetStatus.InStock},
-        {"使用中", AssetStatus.InUse}, {"InUse", AssetStatus.InUse},
-        {"维修中", AssetStatus.Maintenance}, {"Maintenance", AssetStatus.Maintenance},
-        {"已报废", AssetStatus.Retired}, {"Retired", AssetStatus.Retired},
-        {"已处置", AssetStatus.Disposed}, {"Disposed", AssetStatus.Disposed},
+        {"在库", AssetStatus.InStock},
+        {"使用中", AssetStatus.InUse},
+        {"已报废(资产)", AssetStatus.Retired},
+        {"已报废(设备)", AssetStatus.Retired},
     };
 
-    public AssetsImportController(AppDbContext db)
-    {
-        _db = db;
-    }
+    // 标准列标题映射（支持中英文）
+    private const int COL_SN = 1;       // B列: sn/产品SN
+    private const int COL_SAPSN = 2;    // C列: sapSn/SAP资产编码
+    private const int COL_TYPE1 = 3;    // D列: assetType1/资产一级分类
+    private const int COL_TYPE2 = 4;    // E列: assetType2/资产二级分类
+    private const int COL_TYPE3 = 5;    // F列: assetType3/资产三级分类
+    private const int COL_BRAND = 6;    // G列: brand/品牌
+    private const int COL_MODEL = 7;    // H列: productModel/产品型号
+    private const int COL_SPEC = 8;     // I列: specification/规格
+    private const int COL_DATE = 9;     // J列: dateOfBuy/购买日期
+    private const int COL_STATUS = 10;  // K列: assetStatus/资产状态
+    private const int COL_USER = 11;    // L列: userName/使用人姓名
+    private const int COL_DEPT_INI = 12;// M列: userDepartmentIni/使用人原部门
+    private const int COL_DEPT_BACK = 13;// N列: userDepartmentBack/使用人归还部门
+    private const int COL_COMP_INI = 14;// O列: userCompanyIni/使用人原公司
+    private const int COL_COMP_BACK = 15;// P列: userCompanyBack/使用人归还公司
+    private const int COL_BACK_DATE = 16;// Q列: backDate/归还日期
+    private const int COL_APPLY_NAME = 17;// R列: applyName/领用人姓名
+    private const int COL_APPLY_DATE = 18;// S列: applyDate/领用时间
+    private const int COL_REMARK = 19;   // T列: remark/备注
+
+    public AssetsImportController(AppDbContext db) { _db = db; }
 
     /// <summary>
-    /// 下载 Excel 导入模板
+    /// 下载导入模板（协鑫科技标准格式）
     /// </summary>
     [HttpGet("template")]
-    public IActionResult DownloadTemplate()
+    public async Task<IActionResult> DownloadTemplate()
     {
         using var wb = new XLWorkbook();
-        var ws = wb.Worksheets.Add("资产导入模板");
+        var ws = wb.Worksheets.Add("管理中心资产管理台账");
 
-        // 表头
-        var headers = new[] { "资产编号*", "名称*", "分类", "品牌", "型号", "序列号", "状态", "采购日期", "采购价格", "过保日期", "位置", "部门名称", "备注" };
-        for (int i = 0; i < headers.Length; i++)
+        // 表头：Row 1 = 英文字段名，Row 2 = 中文说明
+        var fields = new[] {
+            ("id", "主键"),
+            ("sn", "产品SN"),
+            ("sapSn", "SAP资产编码"),
+            ("assetType1", "资产一级分类"),
+            ("assetType2", "资产二级分类"),
+            ("assetType3", "资产三级分类"),
+            ("brand", "品牌"),
+            ("productModel", "产品型号"),
+            ("specification", "规格"),
+            ("dateOfBuy", "购买日期"),
+            ("assetStatus", "资产状态"),
+            ("userName", "使用人姓名"),
+            ("userDepartmentIni", "使用人原部门"),
+            ("userDepartmentBack", "使用人归还部门"),
+            ("userCompanyIni", "使用人原公司"),
+            ("userCompanyBack", "使用人归还公司"),
+            ("backDate", "归还日期"),
+            ("applyName", "领用人姓名"),
+            ("applyDate", "领用时间"),
+            ("remark", "备注"),
+        };
+
+        for (int i = 0; i < fields.Length; i++)
         {
-            var cell = ws.Cell(1, i + 1);
-            cell.Value = headers[i];
-            cell.Style.Font.Bold = true;
-            cell.Style.Fill.BackgroundColor = XLColor.LightGray;
-            cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(1, i + 1).Value = fields[i].Item1;
+            ws.Cell(1, i + 1).Style.Font.Bold = true;
+            ws.Cell(1, i + 1).Style.Fill.BackgroundColor = XLColor.CornflowerBlue;
+            ws.Cell(1, i + 1).Style.Font.FontColor = XLColor.White;
+
+            ws.Cell(2, i + 1).Value = fields[i].Item2;
+            ws.Cell(2, i + 1).Style.Font.Bold = true;
+            ws.Cell(2, i + 1).Style.Fill.BackgroundColor = XLColor.LightGray;
         }
 
         // 示例数据
-        var examples = new[]
-        {
-            new[] { "NB-001", "联想 ThinkPad X1 Carbon", "笔记本", "联想", "X1 Carbon Gen 11", "", "使用中", "2025-06-15", "12999", "2028-06-15", "苏州总部3楼", "IT部门", "管理员工位" },
-            new[] { "PC-001", "戴尔 OptiPlex 7010", "台式电脑", "戴尔", "OptiPlex 7010", "SN12345", "在库", "2024-09-15", "5499", "2027-09-15", "仓库B", "财务部", "" },
-            new[] { "SRV-001", "戴尔 PowerEdge R750", "服务器", "戴尔", "PowerEdge R750", "", "使用中", "2024-01-15", "89999", "2029-01-15", "苏州机房", "IT部门", "主数据库服务器" },
-        };
-
-        for (int r = 0; r < examples.Length; r++)
-        {
-            for (int c = 0; c < examples[r].Length; c++)
-            {
-                ws.Cell(r + 2, c + 1).Value = examples[r][c];
-            }
-        }
+        ws.Cell(3, 1).Value = "";  // id
+        ws.Cell(3, 2).Value = "SN202604001";
+        ws.Cell(3, 3).Value = "";  // sapSn
+        ws.Cell(3, 4).Value = "终端类";
+        ws.Cell(3, 5).Value = "笔记本电脑";
+        ws.Cell(3, 6).Value = "";  // assetType3
+        ws.Cell(3, 7).Value = "惠普";
+        ws.Cell(3, 8).Value = "630 G11";
+        ws.Cell(3, 9).Value = "Intel Ultra 5&500G&16G";
+        ws.Cell(3, 10).Value = "2025/12/24";
+        ws.Cell(3, 11).Value = "使用中";
+        ws.Cell(3, 12).Value = "张三";
+        ws.Cell(3, 13).Value = "数字与信息化中心";
+        ws.Cell(3, 14).Value = "";
+        ws.Cell(3, 15).Value = "协鑫科技控股有限公司";
+        ws.Cell(3, 16).Value = "";
+        ws.Cell(3, 17).Value = "";
+        ws.Cell(3, 18).Value = "张三";
+        ws.Cell(3, 19).Value = "2025/12/24";
+        ws.Cell(3, 20).Value = "";
 
         // 说明 sheet
-        var ws2 = wb.Worksheets.Add("说明");
-        ws2.Cell(1, 1).Value = "分类可选值";
+        var ws2 = wb.Worksheets.Add("_说明");
+        ws2.Cell(1, 1).Value = "一级分类";
         ws2.Cell(1, 1).Style.Font.Bold = true;
-        var cats = new[] { "台式电脑", "笔记本", "服务器", "网络设备", "打印机", "手机", "软件", "显示器", "外设", "其他" };
-        for (int i = 0; i < cats.Length; i++)
-            ws2.Cell(i + 2, 1).Value = cats[i];
+        var t1 = new[] { "终端类", "服务器类", "网络类", "备品备件类" };
+        for (int i = 0; i < t1.Length; i++) ws2.Cell(i + 2, 1).Value = t1[i];
 
-        ws2.Cell(1, 3).Value = "状态可选值";
+        ws2.Cell(1, 2).Value = "二级分类";
+        ws2.Cell(1, 2).Style.Font.Bold = true;
+        var t2 = new[] { "网络安全", "数通", "服务器", "存储", "笔记本电脑", "台式机电脑", "打印机", "扫描仪", "会议平板", "显示器", "鼠标", "键盘", "充电器", "拾音器", "扩展坞" };
+        for (int i = 0; i < t2.Length; i++) ws2.Cell(i + 2, 2).Value = t2[i];
+
+        ws2.Cell(1, 3).Value = "资产状态";
         ws2.Cell(1, 3).Style.Font.Bold = true;
-        var statuses = new[] { "在库", "使用中", "维修中", "已报废", "已处置" };
-        for (int i = 0; i < statuses.Length; i++)
-            ws2.Cell(i + 2, 3).Value = statuses[i];
+        var st = new[] { "在库", "使用中", "已报废(资产)", "已报废(设备)" };
+        for (int i = 0; i < st.Length; i++) ws2.Cell(i + 2, 3).Value = st[i];
 
-        ws2.Cell(1, 5).Value = "部门名称（需与系统中一致）";
-        ws2.Cell(1, 5).Style.Font.Bold = true;
-        var depts = _db.Departments.ToList();
+        var depts = await _db.Departments.ToListAsync();
+        ws2.Cell(1, 4).Value = "部门名称（系统中）";
+        ws2.Cell(1, 4).Style.Font.Bold = true;
         for (int i = 0; i < depts.Count; i++)
         {
-            ws2.Cell(i + 2, 5).Value = depts[i].Name;
-            ws2.Cell(i + 2, 6).Value = depts[i].Id;
+            ws2.Cell(i + 2, 4).Value = depts[i].Name;
+            ws2.Cell(i + 2, 5).Value = depts[i].Id;
         }
-
-        ws2.Cell(1, 8).Value = "注意事项";
-        ws2.Cell(1, 8).Style.Font.Bold = true;
-        ws2.Cell(2, 8).Value = "1. 资产编号*和名称*为必填项";
-        ws2.Cell(3, 8).Value = "2. 资产编号不能重复";
-        ws2.Cell(4, 8).Value = "3. 分类/状态不填则使用默认值";
-        ws2.Cell(5, 8).Value = "4. 日期格式: YYYY-MM-DD";
-        ws2.Cell(6, 8).Value = "5. 部门名称需与系统一致（见左侧列表）";
 
         ws.Columns().AdjustToContents();
         ws2.Columns().AdjustToContents();
 
         using var stream = new MemoryStream();
         wb.SaveAs(stream);
-        return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "资产导入模板.xlsx");
+        return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "资产台账导入模板.xlsx");
     }
 
     /// <summary>
-    /// 导出全部资产为 Excel
+    /// 导出全部资产（协鑫科技标准格式）
     /// </summary>
     [HttpGet("export")]
     public async Task<IActionResult> Export()
@@ -124,48 +171,58 @@ public class AssetsImportController : ControllerBase
         var assets = await _db.Assets.Include(a => a.Department).Include(a => a.AssignedUser).OrderBy(a => a.AssetTag).ToListAsync();
 
         using var wb = new XLWorkbook();
-        var ws = wb.Worksheets.Add("资产清单");
+        var ws = wb.Worksheets.Add("管理中心资产管理台账");
 
-        var headers = new[] { "资产编号", "名称", "分类", "品牌", "型号", "序列号", "状态", "采购日期", "采购价格", "过保日期", "位置", "部门", "使用人", "IP地址", "MAC地址", "备注" };
+        var headers = new[] { "id", "sn", "sapSn", "assetType1", "assetType2", "assetType3", "brand", "productModel", "specification", "dateOfBuy", "assetStatus", "userName", "userDepartmentIni", "userDepartmentBack", "userCompanyIni", "userCompanyBack", "backDate", "applyName", "applyDate", "remark" };
+        var labels = new[] { "主键", "产品SN", "SAP资产编码", "资产一级分类", "资产二级分类", "资产三级分类", "品牌", "产品型号", "规格", "购买日期", "资产状态", "使用人姓名", "使用人原部门", "使用人归还部门", "使用人原公司", "使用人归还公司", "归还日期", "领用人姓名", "领用时间", "备注" };
+
         for (int i = 0; i < headers.Length; i++)
         {
-            var cell = ws.Cell(1, i + 1);
-            cell.Value = headers[i];
-            cell.Style.Font.Bold = true;
-            cell.Style.Fill.BackgroundColor = XLColor.LightGray;
+            ws.Cell(1, i + 1).Value = headers[i];
+            ws.Cell(1, i + 1).Style.Font.Bold = true;
+            ws.Cell(1, i + 1).Style.Fill.BackgroundColor = XLColor.CornflowerBlue;
+            ws.Cell(1, i + 1).Style.Font.FontColor = XLColor.White;
+
+            ws.Cell(2, i + 1).Value = labels[i];
+            ws.Cell(2, i + 1).Style.Font.Bold = true;
+            ws.Cell(2, i + 1).Style.Fill.BackgroundColor = XLColor.LightGray;
         }
 
         for (int r = 0; r < assets.Count; r++)
         {
             var a = assets[r];
-            ws.Cell(r + 2, 1).Value = a.AssetTag;
-            ws.Cell(r + 2, 2).Value = a.Name;
-            ws.Cell(r + 2, 3).Value = CategoryLabel(a.Category);
-            ws.Cell(r + 2, 4).Value = a.Brand ?? "";
-            ws.Cell(r + 2, 5).Value = a.Model ?? "";
-            ws.Cell(r + 2, 6).Value = a.SerialNumber ?? "";
-            ws.Cell(r + 2, 7).Value = StatusLabel(a.Status);
-            ws.Cell(r + 2, 8).Value = a.PurchaseDate?.ToString("yyyy-MM-dd") ?? "";
-            ws.Cell(r + 2, 9).Value = a.PurchasePrice ?? 0;
-            ws.Cell(r + 2, 9).Style.NumberFormat.Format = "#,##0.00";
-            ws.Cell(r + 2, 10).Value = a.WarrantyExpiry?.ToString("yyyy-MM-dd") ?? "";
-            ws.Cell(r + 2, 11).Value = a.Location ?? "";
-            ws.Cell(r + 2, 12).Value = a.Department?.Name ?? "";
-            ws.Cell(r + 2, 13).Value = a.AssignedUser?.Name ?? "";
-            ws.Cell(r + 2, 14).Value = a.IpAddress ?? "";
-            ws.Cell(r + 2, 15).Value = a.MacAddress ?? "";
-            ws.Cell(r + 2, 16).Value = a.Notes ?? "";
+            int row = r + 3;
+            ws.Cell(row, 1).Value = a.Id;  // id
+            ws.Cell(row, 2).Value = a.AssetTag;  // sn
+            ws.Cell(row, 3).Value = a.SerialNumber ?? "";  // sapSn (复用 serialNumber)
+            ws.Cell(row, 4).Value = Type1Label(a.Category);  // assetType1
+            ws.Cell(row, 5).Value = Type2Label(a.Category);  // assetType2
+            ws.Cell(row, 6).Value = "";  // assetType3
+            ws.Cell(row, 7).Value = a.Brand ?? "";  // brand
+            ws.Cell(row, 8).Value = a.Model ?? "";  // productModel
+            ws.Cell(row, 9).Value = a.Description ?? "";  // specification
+            ws.Cell(row, 10).Value = a.PurchaseDate?.ToString("yyyy/MM/dd") ?? "";  // dateOfBuy
+            ws.Cell(row, 11).Value = StatusLabel(a.Status);  // assetStatus
+            ws.Cell(row, 12).Value = a.AssignedUser?.Name ?? "";  // userName
+            ws.Cell(row, 13).Value = a.Department?.Name ?? "";  // userDepartmentIni
+            ws.Cell(row, 14).Value = "";  // userDepartmentBack
+            ws.Cell(row, 15).Value = "协鑫科技控股有限公司";  // userCompanyIni
+            ws.Cell(row, 16).Value = "";  // userCompanyBack
+            ws.Cell(row, 17).Value = "";  // backDate
+            ws.Cell(row, 18).Value = a.AssignedUser?.Name ?? "";  // applyName
+            ws.Cell(row, 19).Value = a.PurchaseDate?.ToString("yyyy/MM/dd") ?? "";  // applyDate
+            ws.Cell(row, 20).Value = a.Notes ?? "";  // remark
         }
 
         ws.Columns().AdjustToContents();
 
         using var stream = new MemoryStream();
         wb.SaveAs(stream);
-        return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"资产清单_{DateTime.Now:yyyyMMdd}.xlsx");
+        return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"资产台账_{DateTime.Now:yyyyMMdd}.xlsx");
     }
 
     /// <summary>
-    /// 批量导入资产
+    /// 批量导入资产（协鑫科技标准格式）
     /// </summary>
     [HttpPost("import")]
     [RequestSizeLimit(10 * 1024 * 1024)]
@@ -174,16 +231,6 @@ public class AssetsImportController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(new { error = "请选择文件" });
 
-        if (!file.FileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(new { error = "仅支持 .xlsx 格式" });
-
-        // 缓存部门映射
-        var departments = await _db.Departments.ToListAsync();
-        var deptNameMap = departments.ToDictionary(d => d.Name, d => (string?)d.Id, StringComparer.OrdinalIgnoreCase);
-        var deptCodeMap = departments.ToDictionary(d => d.Code, d => (string?)d.Id, StringComparer.OrdinalIgnoreCase);
-
-        var existingTags = new HashSet<string>(await _db.Assets.Select(a => a.AssetTag).ToListAsync());
-
         using var stream = new MemoryStream();
         await file.CopyToAsync(stream);
         stream.Position = 0;
@@ -191,83 +238,118 @@ public class AssetsImportController : ControllerBase
         using var wb = new XLWorkbook(stream);
         var ws = wb.Worksheets.First();
 
+        // 自动检测列位置（支持 Row 1=英文头 或 Row 2=中文头）
+        var colMap = DetectColumns(ws);
+        if (colMap == null)
+            return BadRequest(new { error = "无法识别表头，请使用标准模板格式" });
+
+        // 缓存部门/用户
+        var departments = await _db.Departments.ToListAsync();
+        var users = await _db.Users.ToListAsync();
+        var existingTags = new HashSet<string>(await _db.Assets.Select(a => a.AssetTag).ToListAsync());
+
         int success = 0, skip = 0, fail = 0;
         var errors = new List<string>();
 
         var lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
-        for (int r = 2; r <= lastRow; r++)
-        {
-            var tag = ws.Cell(r, 1).GetString().Trim();
-            var name = ws.Cell(r, 2).GetString().Trim();
+        int startRow = colMap.StartRow;
 
-            if (string.IsNullOrEmpty(tag) || string.IsNullOrEmpty(name))
+        for (int r = startRow; r <= lastRow; r++)
+        {
+            var sn = GetCell(ws, r, colMap.Sn).Trim();
+            if (string.IsNullOrEmpty(sn))
             {
                 skip++;
                 continue;
             }
 
-            if (existingTags.Contains(tag))
+            if (existingTags.Contains(sn))
             {
-                errors.Add($"第{r}行: 资产编号 {tag} 已存在");
+                errors.Add($"第{r}行: 产品SN {sn} 已存在");
                 fail++;
                 continue;
             }
 
-            // 解析分类
-            var catStr = ws.Cell(r, 3).GetString().Trim();
-            if (!CategoryMap.TryGetValue(catStr, out var category))
-                category = AssetCategory.Other;
+            var type1 = GetCell(ws, r, colMap.Type1);
+            var type2 = GetCell(ws, r, colMap.Type2);
+            var statusStr = GetCell(ws, r, colMap.Status);
+            var deptStr = GetCell(ws, r, colMap.DeptIni);
+            var userName = GetCell(ws, r, colMap.UserName);
 
-            // 解析状态
-            var statusStr = ws.Cell(r, 7).GetString().Trim();
+            // 分类映射
+            AssetCategory category = AssetCategory.Other;
+            if (!string.IsNullOrEmpty(type2) && CategoryMap.TryGetValue(type2, out var cat))
+                category = cat;
+
+            // 状态映射
             if (!StatusMap.TryGetValue(statusStr, out var status))
                 status = AssetStatus.InStock;
 
-            // 解析日期
-            DateTime? purchaseDate = ParseDate(ws.Cell(r, 8));
-            DateTime? warrantyExpiry = ParseDate(ws.Cell(r, 10));
+            // 日期解析
+            DateTime? buyDate = ParseDate(ws, r, colMap.DateOfBuy);
 
-            // 解析价格
-            decimal? price = null;
-            var priceCell = ws.Cell(r, 9);
-            if (!priceCell.IsEmpty())
-            {
-                try { price = priceCell.GetValue<decimal>(); }
-                catch
-                {
-                    try { price = decimal.Parse(priceCell.GetString().Trim().Replace(",", "").Replace("¥", "")); }
-                    catch { }
-                }
-            }
-
-            // 查找部门 ID
-            var deptStr = ws.Cell(r, 12).GetString().Trim();
+            // 部门查找或自动创建
             string? deptId = null;
             if (!string.IsNullOrEmpty(deptStr))
             {
-                if (!deptNameMap.TryGetValue(deptStr, out deptId))
-                    deptCodeMap.TryGetValue(deptStr, out deptId);
+                var dept = departments.FirstOrDefault(d => d.Name == deptStr);
+                if (dept != null)
+                    deptId = dept.Id;
+                else
+                {
+                    // 自动创建新部门
+                    var newDept = new Department
+                    {
+                        Id = $"dept-{Guid.NewGuid():N}",
+                        Name = deptStr,
+                        Code = deptStr.Length > 10 ? deptStr[..10] : deptStr,
+                    };
+                    _db.Departments.Add(newDept);
+                    departments.Add(newDept);
+                    deptId = newDept.Id;
+                }
+            }
+
+            // 使用人查找或自动创建
+            string? userId = null;
+            if (!string.IsNullOrEmpty(userName))
+            {
+                var user = users.FirstOrDefault(u => u.Name == userName);
+                if (user != null)
+                    userId = user.Id;
+                else
+                {
+                    var newUser = new User
+                    {
+                        Id = $"user-{Guid.NewGuid():N}",
+                        Name = userName,
+                        EmployeeNo = userName,
+                        DepartmentId = deptId,
+                    };
+                    _db.Users.Add(newUser);
+                    users.Add(newUser);
+                    userId = newUser.Id;
+                }
             }
 
             var asset = new Asset
             {
-                AssetTag = tag,
-                Name = name,
+                AssetTag = sn,
+                Name = BuildAssetName(GetCell(ws, r, colMap.Brand), type2, GetCell(ws, r, colMap.Model)),
                 Category = category,
-                Brand = ws.Cell(r, 4).GetString().Trim(),
-                Model = ws.Cell(r, 5).GetString().Trim(),
-                SerialNumber = ws.Cell(r, 6).GetString().Trim(),
+                Brand = GetCell(ws, r, colMap.Brand),
+                Model = GetCell(ws, r, colMap.Model),
+                Description = GetCell(ws, r, colMap.Specification),
+                SerialNumber = GetCell(ws, r, colMap.SapSn),
                 Status = status,
-                PurchaseDate = purchaseDate,
-                PurchasePrice = price,
-                WarrantyExpiry = warrantyExpiry,
-                Location = ws.Cell(r, 11).GetString().Trim(),
+                PurchaseDate = buyDate,
                 DepartmentId = deptId,
-                Notes = ws.Cell(r, 13).GetString().Trim(),
+                AssignedUserId = userId,
+                Notes = GetCell(ws, r, colMap.Remark),
             };
 
             _db.Assets.Add(asset);
-            existingTags.Add(tag);
+            existingTags.Add(sn);
             success++;
         }
 
@@ -277,30 +359,80 @@ public class AssetsImportController : ControllerBase
         return Ok(new { success, skip, fail, errors });
     }
 
-    private static DateTime? ParseDate(IXLCell cell)
+    // ========== 辅助方法 ==========
+
+    private record ColumnMap(int Sn, int SapSn, int Type1, int Type2, int Type3, int Brand, int Model, int Specification, int DateOfBuy, int Status, int UserName, int DeptIni, int Remark, int StartRow);
+
+    private static ColumnMap? DetectColumns(IXLWorksheet ws)
     {
+        // 检查 Row 1 是否是英文字段名
+        var r1c2 = ws.Cell(1, 2).GetString().Trim().ToLower();
+        if (r1c2 == "sn")
+            return new ColumnMap(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 3); // Row 1=英文, 数据从 Row 3 开始
+
+        // 检查 Row 1 是否是中文字段名
+        var r1c2cn = ws.Cell(1, 2).GetString().Trim();
+        if (r1c2cn == "产品SN" || r1c2cn == "sn")
+            return new ColumnMap(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 2);
+
+        return null;
+    }
+
+    private static string GetCell(IXLWorksheet ws, int row, int col)
+    {
+        return ws.Cell(row, col).GetString().Trim();
+    }
+
+    private static DateTime? ParseDate(IXLWorksheet ws, int row, int col)
+    {
+        var cell = ws.Cell(row, col);
         if (cell.IsEmpty()) return null;
         try
         {
             if (cell.DataType == XLDataType.DateTime)
                 return cell.GetDateTime();
+            if (cell.DataType == XLDataType.Number)
+            {
+                // Excel 数字日期（如 46065 = 2025-12-24）
+                var serial = cell.GetDouble();
+                return DateTime.FromOADate(serial);
+            }
             var str = cell.GetString().Trim();
             if (string.IsNullOrEmpty(str)) return null;
             if (DateTime.TryParse(str, out var dt)) return dt;
+            // 尝试 yyyy/M/d 格式
+            if (DateTime.TryParseExact(str, new[] { "yyyy/M/d", "yyyy/MM/dd", "yyyy-MM-dd" },
+                System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt))
+                return dt;
         }
         catch { }
         return null;
     }
 
-    private static string CategoryLabel(AssetCategory c) => c switch
+    private static string BuildAssetName(string brand, string type2, string model)
     {
-        AssetCategory.Computer => "台式电脑",
-        AssetCategory.Laptop => "笔记本",
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(brand)) parts.Add(brand);
+        if (!string.IsNullOrEmpty(type2)) parts.Add(type2);
+        if (!string.IsNullOrEmpty(model)) parts.Add(model);
+        return parts.Count > 0 ? string.Join(" ", parts) : "未命名资产";
+    }
+
+    private static string Type1Label(AssetCategory c) => c switch
+    {
+        AssetCategory.Computer or AssetCategory.Laptop or AssetCategory.Monitor or AssetCategory.Peripheral => "终端类",
+        AssetCategory.Server or AssetCategory.Software => "服务器类",
+        AssetCategory.NetworkDevice => "网络类",
+        _ => "备品备件类",
+    };
+
+    private static string Type2Label(AssetCategory c) => c switch
+    {
+        AssetCategory.Laptop => "笔记本电脑",
+        AssetCategory.Computer => "台式机电脑",
         AssetCategory.Server => "服务器",
-        AssetCategory.NetworkDevice => "网络设备",
+        AssetCategory.NetworkDevice => "数通",
         AssetCategory.Printer => "打印机",
-        AssetCategory.Phone => "手机",
-        AssetCategory.Software => "软件",
         AssetCategory.Monitor => "显示器",
         AssetCategory.Peripheral => "外设",
         _ => "其他",
@@ -310,9 +442,9 @@ public class AssetsImportController : ControllerBase
     {
         AssetStatus.InStock => "在库",
         AssetStatus.InUse => "使用中",
-        AssetStatus.Maintenance => "维修中",
-        AssetStatus.Retired => "已报废",
-        AssetStatus.Disposed => "已处置",
-        _ => "未知",
+        AssetStatus.Maintenance => "使用中",
+        AssetStatus.Retired => "已报废(资产)",
+        AssetStatus.Disposed => "已报废(设备)",
+        _ => "在库",
     };
 }
