@@ -6,10 +6,11 @@ namespace ITAssetManager.API.DTOs;
 public record AssetCreateRequest(
     string AssetTag, string Name, AssetCategory Category,
     string? Description = null, string? Brand = null, string? Model = null,
-    string? SerialNumber = null, DateTime? PurchaseDate = null,
-    decimal? PurchasePrice = null, DateTime? WarrantyExpiry = null,
-    string? Location = null, string? DepartmentId = null,
-    string? IpAddress = null, string? MacAddress = null, string? Notes = null);
+    string? SerialNumber = null, AssetStatus? Status = null,
+    DateTime? PurchaseDate = null, decimal? PurchasePrice = null,
+    DateTime? WarrantyExpiry = null, string? Location = null,
+    string? DepartmentId = null, string? IpAddress = null,
+    string? MacAddress = null, string? Notes = null);
 
 public record AssetUpdateRequest(
     string? Name = null, string? Description = null, string? Brand = null,

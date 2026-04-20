@@ -55,51 +55,6 @@ public class ChatBIController : ControllerBase
 
     private async Task<object> MatchAndQuery(string question)
     {
-        // ===== 规则 1：各类资产数量分布（饼图）=====
-        if (MatchAny(question, "各类", "分布", "分类", "类别", "数量"))
-        {
-            var data = await _db.Assets
-                .GroupBy(a => a.Category)
-                .Select(g => new { name = g.Key.ToString(), value = g.Count() })
-                .ToListAsync();
-
-            return new
-            {
-                answer = $"系统中共有 {data.Sum(d => d.value)} 件资产，按类别分布如下：\n" +
-                         string.Join("\n", data.Select(d => $"- {CategoryName(d.name)}：{d.value} 件")),
-                chartType = "pie",
-                chartData = new
-                {
-                    title = "资产类别分布",
-                    series = data.Select(d => new { name = CategoryName(d.name), value = d.value })
-                },
-                sql = "SELECT Category, COUNT(*) FROM Assets GROUP BY Category"
-            };
-        }
-
-        // ===== 规则 2：资产状态统计（柱状图）=====
-        if (MatchAny(question, "状态", "使用中", "闲置", "报废", "在库", "维修"))
-        {
-            var data = await _db.Assets
-                .GroupBy(a => a.Status)
-                .Select(g => new { name = g.Key.ToString(), value = g.Count() })
-                .ToListAsync();
-
-            return new
-            {
-                answer = $"资产状态分布：\n" +
-                         string.Join("\n", data.Select(d => $"- {StatusName(d.name)}：{d.value} 件")),
-                chartType = "bar",
-                chartData = new
-                {
-                    title = "资产状态统计",
-                    categories = data.Select(d => StatusName(d.name)),
-                    values = data.Select(d => d.value)
-                },
-                sql = "SELECT Status, COUNT(*) FROM Assets GROUP BY Status"
-            };
-        }
-
         // ===== 规则 3：各部门资产分布（横向柱状图）=====
         if (MatchAny(question, "部门", "哪个部门"))
         {
@@ -122,6 +77,79 @@ public class ChatBIController : ControllerBase
                     values = data.Select(d => d.value)
                 },
                 sql = "SELECT d.Name, COUNT(*) FROM Assets a LEFT JOIN Departments d ON a.DepartmentId = d.Id GROUP BY d.Name"
+            };
+        }
+
+
+        // ===== 规则 6：品牌分布（饼图）=====
+        if (MatchAny(question, "品牌", "厂商", "制造商"))
+        {
+            var data = await _db.Assets
+                .Where(a => a.Brand != null && a.Brand != "")
+                .GroupBy(a => a.Brand!)
+                .Select(g => new { name = g.Key, value = g.Count() })
+                .OrderByDescending(d => d.value)
+                .Take(10)
+                .ToListAsync();
+
+            return new
+            {
+                answer = $"品牌分布 TOP {data.Count}：\n" +
+                         string.Join("\n", data.Select(d => $"- {d.name}：{d.value} 件")),
+                chartType = "pie",
+                chartData = new
+                {
+                    title = "品牌分布 TOP 10",
+                    series = data.Select(d => new { name = d.name, value = d.value })
+                },
+                sql = "SELECT Brand, COUNT(*) FROM Assets WHERE Brand IS NOT NULL GROUP BY Brand ORDER BY COUNT(*) DESC LIMIT 10"
+            };
+        }
+
+
+        // ===== 规则 1：各类资产数量分布（饼图）=====
+        if (MatchAny(question, "各类", "分类", "类别", "类型"))
+        {
+            var data = await _db.Assets
+                .GroupBy(a => a.Category)
+                .Select(g => new { name = g.Key.ToString(), value = g.Count() })
+                .ToListAsync();
+
+            return new
+            {
+                answer = $"系统中共有 {data.Sum(d => d.value)} 件资产，按类别分布如下：\n" +
+                         string.Join("\n", data.Select(d => $"- {CategoryName(d.name)}：{d.value} 件")),
+                chartType = "pie",
+                chartData = new
+                {
+                    title = "资产类别分布",
+                    series = data.Select(d => new { name = CategoryName(d.name), value = d.value })
+                },
+                sql = "SELECT Category, COUNT(*) FROM Assets GROUP BY Category"
+            };
+        }
+
+
+        // ===== 规则 2：资产状态统计（柱状图）=====
+        if (MatchAny(question, "状态", "使用中", "闲置", "报废", "在库", "维修"))
+        {
+            var data = await _db.Assets
+                .GroupBy(a => a.Status)
+                .Select(g => new { name = g.Key.ToString(), value = g.Count() })
+                .ToListAsync();
+
+            return new
+            {
+                answer = $"资产状态分布：\n" +
+                         string.Join("\n", data.Select(d => $"- {StatusName(d.name)}：{d.value} 件")),
+                chartType = "bar",
+                chartData = new
+                {
+                    title = "资产状态统计",
+                    categories = data.Select(d => StatusName(d.name)),
+                    values = data.Select(d => d.value)
+                },
+                sql = "SELECT Status, COUNT(*) FROM Assets GROUP BY Status"
             };
         }
 
@@ -158,8 +186,10 @@ public class ChatBIController : ControllerBase
         // ===== 规则 5：资产价值统计（柱状图）=====
         if (MatchAny(question, "价值", "金额", "总值", "价格", "多少钱"))
         {
-            var data = await _db.Assets
-                .Where(a => a.PurchasePrice != null)
+            var assets = await _db.Assets
+                .Where(a => a.PurchasePrice != null && a.PurchasePrice > 0)
+                .ToListAsync();
+            var data = assets
                 .GroupBy(a => a.Category)
                 .Select(g => new
                 {
@@ -167,7 +197,7 @@ public class ChatBIController : ControllerBase
                     value = g.Sum(a => a.PurchasePrice ?? 0),
                     count = g.Count()
                 })
-                .ToListAsync();
+                .ToList();
 
             return new
             {
@@ -181,31 +211,6 @@ public class ChatBIController : ControllerBase
                     values = data.Select(d => d.value)
                 },
                 sql = "SELECT Category, SUM(PurchasePrice) FROM Assets GROUP BY Category"
-            };
-        }
-
-        // ===== 规则 6：品牌分布（饼图）=====
-        if (MatchAny(question, "品牌", "厂商", "制造商"))
-        {
-            var data = await _db.Assets
-                .Where(a => a.Brand != null && a.Brand != "")
-                .GroupBy(a => a.Brand!)
-                .Select(g => new { name = g.Key, value = g.Count() })
-                .OrderByDescending(d => d.value)
-                .Take(10)
-                .ToListAsync();
-
-            return new
-            {
-                answer = $"品牌分布 TOP {data.Count}：\n" +
-                         string.Join("\n", data.Select(d => $"- {d.name}：{d.value} 件")),
-                chartType = "pie",
-                chartData = new
-                {
-                    title = "品牌分布 TOP 10",
-                    series = data.Select(d => new { name = d.name, value = d.value })
-                },
-                sql = "SELECT Brand, COUNT(*) FROM Assets WHERE Brand IS NOT NULL GROUP BY Brand ORDER BY COUNT(*) DESC LIMIT 10"
             };
         }
 

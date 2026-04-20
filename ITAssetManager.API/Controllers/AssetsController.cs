@@ -43,6 +43,7 @@ public class AssetsController : ControllerBase
             Description = req.Description, Brand = req.Brand, Model = req.Model,
             SerialNumber = req.SerialNumber, PurchaseDate = req.PurchaseDate,
             PurchasePrice = req.PurchasePrice, WarrantyExpiry = req.WarrantyExpiry,
+            Status = req.Status ?? AssetStatus.InStock,
             Location = req.Location, DepartmentId = req.DepartmentId,
             IpAddress = req.IpAddress, MacAddress = req.MacAddress, Notes = req.Notes
         };
