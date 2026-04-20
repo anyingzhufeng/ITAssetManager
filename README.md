@@ -79,6 +79,8 @@ npm run dev
 | v0.1.0 | 2026-04-10 | 初始版本：基础 CRUD + JWT + 飞书配置 |
 | v0.2.0 | 2026-04-10 | 切换 PostgreSQL 数据库 |
 | v0.2.1 | 2026-04-10 | 支持 SQLite / PostgreSQL 双数据库切换 |
+| v0.2.2 | 2026-04-12 | 添加 CLAUDE.md 项目指引文件 |
+| v0.3.0 | 2026-04-20 | 新增 ChatBI 智能问数模块（自然语言查询 + ECharts 图表） |
 
 ## License
 
