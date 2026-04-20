@@ -9,6 +9,7 @@ const routes = [
   { path: '/users', name: 'Users', component: () => import('./views/Users.vue') },
   { path: '/licenses', name: 'Licenses', component: () => import('./views/Licenses.vue') },
   { path: '/settings', name: 'Settings', component: () => import('./views/Settings.vue') },
+  { path: '/chatbi', name: 'ChatBI', component: () => import('./views/ChatBI.vue') },
 ]
 
 export const router = createRouter({

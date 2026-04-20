@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
-  House, Monitor, OfficeBuilding, User, Document, Setting, Menu as MenuIcon
+  House, Monitor, OfficeBuilding, User, Document, Setting, Menu as MenuIcon, ChatDotRound
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -25,6 +25,7 @@ const menuItems = [
   { index: '/departments', title: '部门管理', icon: OfficeBuilding },
   { index: '/users', title: '人员管理', icon: User },
   { index: '/licenses', title: '软件许可', icon: Document },
+  { index: '/chatbi', title: 'ChatBI', icon: ChatDotRound },
   { index: '/settings', title: '系统设置', icon: Setting },
 ]
 </script>
