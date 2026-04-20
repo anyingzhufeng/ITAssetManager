@@ -37,6 +37,13 @@ export const assetApi = {
   return: (id: string) => api.post(`/assets/${id}/return`),
   maintain: (id: string, reason: string) => api.post(`/assets/${id}/maintain`, { reason }),
   logs: (id: string) => api.get(`/assets/${id}/logs`),
+  template: () => api.get('/assetsimport/template', { responseType: 'blob' }),
+  export: () => api.get('/assetsimport/export', { responseType: 'blob' }),
+  import: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post('/assetsimport/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
 }
 
 export const deptApi = {

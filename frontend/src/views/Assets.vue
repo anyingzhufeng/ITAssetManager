@@ -12,6 +12,9 @@ const keyword = ref('')
 const dialogVisible = ref(false)
 const editForm = ref<any>({})
 const isEdit = ref(false)
+const importDialogVisible = ref(false)
+const importFile = ref<File | null>(null)
+const importResult = ref<any>(null)
 
 const categoryOptions = [
   { value: 0, label: '台式电脑' }, { value: 1, label: '笔记本' },
@@ -25,7 +28,7 @@ const statusMap: Record<number, { label: string; type: string }> = {
   0: { label: '在库', type: 'info' },
   1: { label: '使用中', type: 'success' },
   2: { label: '维修中', type: 'warning' },
-  3: { label: '已退役', type: 'danger' },
+  3: { label: '已报废', type: 'danger' },
   4: { label: '已处置', type: 'danger' },
 }
 
@@ -79,6 +82,64 @@ async function handleReturn(row: any) {
   loadData()
 }
 
+// 导出 Excel
+async function handleExport() {
+  try {
+    const res = await assetApi.export()
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `资产清单_${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch { ElMessage.error('导出失败') }
+}
+
+// 下载模板
+async function handleTemplate() {
+  try {
+    const res = await assetApi.template()
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '资产导入模板.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch { ElMessage.error('下载失败') }
+}
+
+// 导入
+function handleImport() {
+  importFile.value = null
+  importResult.value = null
+  importDialogVisible.value = true
+}
+
+function onFileChange(e: any) {
+  importFile.value = e.target?.files?.[0] || null
+}
+
+async function doImport() {
+  if (!importFile.value) {
+    ElMessage.warning('请选择文件')
+    return
+  }
+  try {
+    const res = await assetApi.import(importFile.value)
+    importResult.value = res.data
+    if (res.data.success > 0) {
+      ElMessage.success(`导入完成: ${res.data.success} 条成功`)
+      loadData()
+    }
+    if (res.data.fail > 0) {
+      ElMessage.warning(`${res.data.fail} 条失败，请查看错误信息`)
+    }
+  } catch (e: any) {
+    ElMessage.error(e.response?.data?.error || '导入失败')
+  }
+}
+
 onMounted(loadData)
 </script>
 
@@ -92,9 +153,13 @@ onMounted(loadData)
         <el-col :span="6">
           <el-input v-model="keyword" placeholder="搜索资产编号/名称/序列号" clearable @clear="loadData" @keyup.enter="loadData" />
         </el-col>
-        <el-col :span="4">
+        <el-col :span="12">
           <el-button type="primary" @click="loadData">搜索</el-button>
           <el-button type="success" @click="openCreate">新增资产</el-button>
+          <el-divider direction="vertical" />
+          <el-button @click="handleImport">📥 导入</el-button>
+          <el-button @click="handleExport">📤 导出</el-button>
+          <el-button @click="handleTemplate">📄 下载模板</el-button>
         </el-col>
       </el-row>
     </el-card>
@@ -208,6 +273,50 @@ onMounted(loadData)
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSave">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 导入对话框 -->
+    <el-dialog v-model="importDialogVisible" title="📥 批量导入资产" width="550px">
+      <div style="margin-bottom: 16px">
+        <p>1. 先下载模板，按格式填写数据</p>
+        <p>2. 选择填写好的 .xlsx 文件上传</p>
+        <p>3. 系统自动校验并导入</p>
+      </div>
+
+      <el-upload
+        :auto-upload="false"
+        :on-change="(file: any) => importFile = file.raw"
+        :limit="1"
+        accept=".xlsx"
+        drag
+      >
+        <el-icon style="font-size: 48px; color: #909399"><upload-filled /></el-icon>
+        <div>拖拽或点击选择 .xlsx 文件</div>
+      </el-upload>
+
+      <div v-if="importResult" style="margin-top: 16px">
+        <el-divider />
+        <el-descriptions title="导入结果" :column="1" border>
+          <el-descriptions-item label="成功">
+            <el-tag type="success">{{ importResult.success }} 条</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="跳过（空行）">
+            <el-tag type="info">{{ importResult.skip }} 条</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="失败">
+            <el-tag type="danger">{{ importResult.fail }} 条</el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+        <div v-if="importResult.errors?.length" style="margin-top: 8px">
+          <el-alert v-for="(err, i) in importResult.errors" :key="i" :title="err" type="warning" show-icon style="margin-bottom: 4px" />
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="handleTemplate">📄 下载模板</el-button>
+        <el-button @click="importDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="doImport" :disabled="!importFile">开始导入</el-button>
       </template>
     </el-dialog>
   </div>
